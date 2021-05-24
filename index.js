@@ -6,6 +6,7 @@ const passport = require('passport');
 const boom = require('@hapi/boom');
 const cookieParser = require('cookie-parser');
 const axios = require('axios');
+const session = require('express-session');
 
 const THIRTY_DAYS_IN_SEC = 2592000;
 const TWO_HOURS_IN_SEC = 7200;
@@ -16,10 +17,20 @@ const app = express();
 
 // body parser
 app.use(express.json());
-app.use(cookieParser());
 
+app.use(cookieParser());
+app.use(session({ secret: config.sessionSecret }));
+app.use(passport.initialize());
+app.use(passport.session());
 // Basic strategy
 require('./utils/auth/strategies/basic');
+
+// Oauth Google Strategy
+
+require('./utils/auth/strategies/oauth');
+// Twitter Strategy
+
+require('./utils/auth/strategies/twitter');
 
 app.post('/auth/sign-in', async (req, res, next) => {
   passport.authenticate('basic', (error, data) => {
@@ -34,7 +45,11 @@ app.post('/auth/sign-in', async (req, res, next) => {
         }
         const { rememberMe } = req.body;
         const { token, ...user } = data;
-        res.cookie("token", token);
+        res.cookie('token', token, {
+          httpOnly: !config.dev,
+          secure: !config.dev,
+          maxAge: rememberMe,
+        });
         return res.status(200).json(user);
       });
     } catch (error) {
@@ -57,12 +72,40 @@ app.post('/auth/sign-up', async (req, res, next) => {
   }
 });
 
+app.get('/auth/google-oauth', passport.authenticate('google-oauth', {
+  scope: ['email', 'profile', 'openid'],
+}));
+app.get('/auth/google-oauth/callback', passport.authenticate('google-oauth', { session: false }), (req, res, next) => {
+  if (!req.user) {
+    next(boom.unauthorized());
+  }
+  const { token, ...user } = req.user;
+  res.cookie('token', token, {
+    httpOnly: !config.dev,
+    secure: !config.dev,
+  });
+  res.status(200).json(user);
+});
+
+app.get('/auth/twitter', passport.authenticate('twitter'));
+
+app.get('/auth/twitter/callback', passport.authenticate('twitter', { session: false }), (req, res, next) => {
+  if (!req.user) {
+    next(boom.unauthorized());
+  }
+  const { token, ...user } = req.user;
+  res.cookie('token', token, {
+    httpOnly: !config.dev,
+    secure: !config.dev,
+  });
+  res.status(200).json(user);
+});
+
 app.get('/movies', async (req, res, next) => {
   res.send({
     message: 'hola',
   });
 });
-
 app.post('/user-movies', async (req, res, next) => {
   try {
     const { body: userMovie } = req;
