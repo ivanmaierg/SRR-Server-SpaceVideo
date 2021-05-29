@@ -32,6 +32,8 @@ require('./utils/auth/strategies/oauth');
 
 require('./utils/auth/strategies/twitter');
 
+require('./utils/auth/strategies/linkedin');
+
 app.post('/auth/sign-in', async (req, res, next) => {
   passport.authenticate('basic', (error, data) => {
     try {
@@ -101,11 +103,37 @@ app.get('/auth/twitter/callback', passport.authenticate('twitter', { session: fa
   res.status(200).json(user);
 });
 
+app.get(
+  '/auth/linkedin',
+  passport.authenticate('linkedin', { state: 'SOME STATE' }),
+);
+
+app.get(
+  '/auth/linkedin/callback',
+  passport.authenticate('linkedin', { session: false }),
+  (req, res, next) => {
+    if (!req.user) {
+      next(boom.unauthorized());
+    }
+
+    const { token, ...user } = req.user;
+
+    res.cookie('token', token, {
+      httpOnly: !config.dev,
+      secure: !config.dev,
+    });
+
+    res.status(200).json(user);
+  },
+);
+// movies
+
 app.get('/movies', async (req, res, next) => {
   res.send({
     message: 'hola',
   });
 });
+
 app.post('/user-movies', async (req, res, next) => {
   try {
     const { body: userMovie } = req;
